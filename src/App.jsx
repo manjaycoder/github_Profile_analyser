@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import styled, { keyframes, ThemeProvider } from 'styled-components';
-import { FiGithub, FiSearch, FiUser, FiMapPin, FiBriefcase, FiLink, FiMail, FiUsers, FiCode, FiClock, FiCalendar, FiActivity, FiSun, FiMoon } from 'react-icons/fi';
+import { FiGithub, FiSearch, FiUser, FiMapPin, FiBriefcase, FiLink, FiMail, FiUsers, FiCode, FiClock, FiCalendar, FiActivity, FiSun, FiMoon, FiDownload } from 'react-icons/fi';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // Define light and dark themes
 const lightTheme = {
@@ -253,8 +255,10 @@ const MetaValue = styled.div`
 `;
 
 const StatsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  
   background: ${props => props.theme.statBg};
   border-top: 1px solid ${props => props.theme.cardBorder};
 `;
@@ -391,6 +395,7 @@ const App = () => {
   const [error, setError] = useState(null);
   const [contributions, setContributions] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
+  const profileRef = useRef(null);
 
   const toggleTheme = () => {
     setDarkMode(!darkMode);
@@ -405,7 +410,7 @@ const App = () => {
       const result = await response.json();
       setUserData(result);
       
-      // Fetch contributions data
+     
       const contributionsResponse = await fetch(`https://github-contributions-api.jogruber.de/v4/${user}?y=last`);
       if (contributionsResponse.ok) {
         const contributionsData = await contributionsResponse.json();
@@ -434,15 +439,51 @@ const App = () => {
     }
   };
 
-  // Generate mock contributions if API fails (for demo purposes)
   const generateMockContributions = () => {
     const mockContributions = [];
     for (let i = 0; i < 365; i++) {
       mockContributions.push({
-        level: Math.floor(Math.random() * 5) // Random level between 0-4
+        level: Math.floor(Math.random() * 5) 
       });
     }
     return mockContributions;
+  };
+
+  const exportToPDF = () => {
+    if (!profileRef.current) return;
+    
+    const currentTheme = darkMode;
+    setDarkMode(false); 
+    
+    setTimeout(() => {
+      html2canvas(profileRef.current, {
+        scale: 2,
+        backgroundColor: lightTheme.body,
+        logging: false,
+        useCORS: true
+      }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgWidth = 210;
+        const pageHeight = 295; 
+        const imgHeight = canvas.height * imgWidth / canvas.width;
+        let heightLeft = imgHeight;
+        let position = 0;
+        
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+        
+        while (heightLeft >= 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+        
+        pdf.save(`${username || 'github'}_profile.pdf`);
+        if (currentTheme) setDarkMode(true); // Restore original theme
+      });
+    }, 300);
   };
 
   const displayContributions = contributions.length > 0 ? contributions : generateMockContributions();
@@ -478,161 +519,173 @@ const App = () => {
             <p>Please try another username</p>
           </ErrorMessage>
         ) : userData ? (
-          <ProfileContainer>
-            <ProfileHeader>
-              <Avatar src={userData.avatar_url} alt={userData.login} />
-              <ProfileInfo>
-                <Name>
-                  {userData.name || userData.login}
-                  {userData.hireable && (
-                    <span style={{
-                      display: 'inline-block',
-                      marginLeft: '0.5rem',
-                      backgroundColor: '#dcfce7',
-                      color: '#166534',
-                      fontSize: '0.75rem',
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: '999px',
-                      fontWeight: '600'
-                    }}>
-                      Hireable
-                    </span>
-                  )}
-                </Name>
-                <Username href={userData.html_url} target="_blank" rel="noopener noreferrer">
-                  <FiGithub style={{ verticalAlign: 'middle', marginRight: '0.25rem' }} />
-                  {userData.login}
-                </Username>
-                <Bio>{userData.bio || 'No bio available'}</Bio>
-              </ProfileInfo>
-            </ProfileHeader>
-
-            <MetaGrid>
-              <MetaItem>
-                <MetaIcon>
-                  <FiUser size={18} />
-                </MetaIcon>
-                <MetaContent>
-                  <MetaLabel>Full Name</MetaLabel>
-                  <MetaValue>{userData.name || 'Not specified'}</MetaValue>
-                </MetaContent>
-              </MetaItem>
-
-              <MetaItem>
-                <MetaIcon>
-                  <FiMapPin size={18} />
-                </MetaIcon>
-                <MetaContent>
-                  <MetaLabel>Location</MetaLabel>
-                  <MetaValue>{userData.location || 'Not specified'}</MetaValue>
-                </MetaContent>
-              </MetaItem>
-
-              <MetaItem>
-                <MetaIcon>
-                  <FiBriefcase size={18} />
-                </MetaIcon>
-                <MetaContent>
-                  <MetaLabel>Company</MetaLabel>
-                  <MetaValue>{userData.company || 'Not specified'}</MetaValue>
-                </MetaContent>
-              </MetaItem>
-
-              <MetaItem>
-                <MetaIcon>
-                  <FiLink size={18} />
-                </MetaIcon>
-                <MetaContent>
-                  <MetaLabel>Website/Blog</MetaLabel>
-                  <MetaValue>
-                    {userData.blog ? (
-                      <a href={userData.blog.startsWith('http') ? userData.blog : `https://${userData.blog}`} target="_blank" rel="noopener noreferrer">
-                        {userData.blog}
-                      </a>
-                    ) : (
-                      'Not specified'
+          <>
+            <div style={{ textAlign: 'right', marginBottom: '1rem' }}>
+              <SearchButton 
+                onClick={exportToPDF}
+                style={{ borderRadius: '0.5rem', padding: '0.5rem 1rem' }}
+              >
+                <FiDownload size={18} />
+                Export to PDF
+              </SearchButton>
+            </div>
+            
+            <ProfileContainer ref={profileRef}>
+              <ProfileHeader>
+                <Avatar src={userData.avatar_url} alt={userData.login} />
+                <ProfileInfo>
+                  <Name>
+                    {userData.name || userData.login}
+                    {userData.hireable && (
+                      <span style={{
+                        display: 'inline-block',
+                        marginLeft: '0.5rem',
+                        backgroundColor: '#dcfce7',
+                        color: '#166534',
+                        fontSize: '0.75rem',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '999px',
+                        fontWeight: '600'
+                      }}>
+                        Hireable
+                      </span>
                     )}
-                  </MetaValue>
-                </MetaContent>
-              </MetaItem>
+                  </Name>
+                  <Username href={userData.html_url} target="_blank" rel="noopener noreferrer">
+                    <FiGithub style={{ verticalAlign: 'middle', marginRight: '0.25rem' }} />
+                    {userData.login}
+                  </Username>
+                  <Bio>{userData.bio || 'No bio available'}</Bio>
+                </ProfileInfo>
+              </ProfileHeader>
 
-              <MetaItem>
-                <MetaIcon>
-                  <FiMail size={18} />
-                </MetaIcon>
-                <MetaContent>
-                  <MetaLabel>Email</MetaLabel>
-                  <MetaValue>{userData.email || 'Not public'}</MetaValue>
-                </MetaContent>
-              </MetaItem>
+              <MetaGrid>
+                <MetaItem>
+                  <MetaIcon>
+                    <FiUser size={18} />
+                  </MetaIcon>
+                  <MetaContent>
+                    <MetaLabel>Full Name</MetaLabel>
+                    <MetaValue>{userData.name || 'Not specified'}</MetaValue>
+                  </MetaContent>
+                </MetaItem>
 
-              <MetaItem>
-                <MetaIcon>
-                  <FiCalendar size={18} />
-                </MetaIcon>
-                <MetaContent>
-                  <MetaLabel>Joined GitHub</MetaLabel>
-                  <MetaValue>{new Date(userData.created_at).toLocaleDateString()}</MetaValue>
-                </MetaContent>
-              </MetaItem>
-            </MetaGrid>
+                <MetaItem>
+                  <MetaIcon>
+                    <FiMapPin size={18} />
+                  </MetaIcon>
+                  <MetaContent>
+                    <MetaLabel>Location</MetaLabel>
+                    <MetaValue>{userData.location || 'Not specified'}</MetaValue>
+                  </MetaContent>
+                </MetaItem>
 
-            <StatsGrid>
-              <StatItem>
-                <StatValue>{userData.followers}</StatValue>
-                <StatLabel>Followers</StatLabel>
-              </StatItem>
-              <StatItem>
-                <StatValue>{userData.following}</StatValue>
-                <StatLabel>Following</StatLabel>
-              </StatItem>
-              <StatItem>
-                <StatValue>{userData.public_repos}</StatValue>
-                <StatLabel>Public Repos</StatLabel>
-              </StatItem>
-            </StatsGrid>
+                <MetaItem>
+                  <MetaIcon>
+                    <FiBriefcase size={18} />
+                  </MetaIcon>
+                  <MetaContent>
+                    <MetaLabel>Company</MetaLabel>
+                    <MetaValue>{userData.company || 'Not specified'}</MetaValue>
+                  </MetaContent>
+                </MetaItem>
 
-            <ContributionsContainer>
-              <ContributionsHeader>
-                <ContributionsTitle>
-                  <FiActivity size={20} />
-                  Daily Contributions (Last Year)
-                </ContributionsTitle>
-              </ContributionsHeader>
-              <ContributionsGrid>
-                {displayContributions.map((day, index) => (
-                  <ContributionDay 
-                    key={index} 
-                    level={day.level} 
-                    index={index % 20} // For staggered animation
-                    title={`${day.date || 'Date not available'}: ${day.count || 0} contributions`}
-                  />
-                ))}
-              </ContributionsGrid>
-              <ContributionLegend>
-                <LegendItem>
-                  <LegendColor color={darkMode ? darkTheme.contributionEmpty : lightTheme.contributionEmpty} />
-                  <span>No contributions</span>
-                </LegendItem>
-                <LegendItem>
-                  <LegendColor color="#3b82f6" />
-                  <span>1-9</span>
-                </LegendItem>
-                <LegendItem>
-                  <LegendColor color="#1d4ed8" />
-                  <span>10-19</span>
-                </LegendItem>
-                <LegendItem>
-                  <LegendColor color="#1e40af" />
-                  <span>20-29</span>
-                </LegendItem>
-                <LegendItem>
-                  <LegendColor color="#1e3a8a" />
-                  <span>30+</span>
-                </LegendItem>
-              </ContributionLegend>
-            </ContributionsContainer>
-          </ProfileContainer>
+                <MetaItem>
+                  <MetaIcon>
+                    <FiLink size={18} />
+                  </MetaIcon>
+                  <MetaContent>
+                    <MetaLabel>Website/Blog</MetaLabel>
+                    <MetaValue>
+                      {userData.blog ? (
+                        <a href={userData.blog.startsWith('http') ? userData.blog : `https://${userData.blog}`} target="_blank" rel="noopener noreferrer">
+                          {userData.blog}
+                        </a>
+                      ) : (
+                        'Not specified'
+                      )}
+                    </MetaValue>
+                  </MetaContent>
+                </MetaItem>
+
+                <MetaItem>
+                  <MetaIcon>
+                    <FiMail size={18} />
+                  </MetaIcon>
+                  <MetaContent>
+                    <MetaLabel>Email</MetaLabel>
+                    <MetaValue>{userData.email || 'Not public'}</MetaValue>
+                  </MetaContent>
+                </MetaItem>
+
+                <MetaItem>
+                  <MetaIcon>
+                    <FiCalendar size={18} />
+                  </MetaIcon>
+                  <MetaContent>
+                    <MetaLabel>Joined GitHub</MetaLabel>
+                    <MetaValue>{new Date(userData.created_at).toLocaleDateString()}</MetaValue>
+                  </MetaContent>
+                </MetaItem>
+              </MetaGrid>
+
+              <StatsGrid>
+                <StatItem>
+                  <StatValue>{userData.followers}</StatValue>
+                  <StatLabel>Followers</StatLabel>
+                </StatItem>
+                <StatItem>
+                  <StatValue>{userData.following}</StatValue>
+                  <StatLabel>Following</StatLabel>
+                </StatItem>
+                <StatItem>
+                  <StatValue>{userData.public_repos}</StatValue>
+                  <StatLabel>Public Repos</StatLabel>
+                </StatItem>
+              </StatsGrid>
+
+              <ContributionsContainer>
+                <ContributionsHeader>
+                  <ContributionsTitle>
+                    <FiActivity size={20} />
+                    Daily Contributions (Last Year)
+                  </ContributionsTitle>
+                </ContributionsHeader>
+                <ContributionsGrid>
+                  {displayContributions.map((day, index) => (
+                    <ContributionDay 
+                      key={index} 
+                      level={day.level} 
+                      index={index % 20}
+                      title={`${day.date || 'Date not available'}: ${day.count || 0} contributions`}
+                    />
+                  ))}
+                </ContributionsGrid>
+                <ContributionLegend>
+                  <LegendItem>
+                    <LegendColor color={darkMode ? darkTheme.contributionEmpty : lightTheme.contributionEmpty} />
+                    <span>No contributions</span>
+                  </LegendItem>
+                  <LegendItem>
+                    <LegendColor color="#3b82f6" />
+                    <span>1-9</span>
+                  </LegendItem>
+                  <LegendItem>
+                    <LegendColor color="#1d4ed8" />
+                    <span>10-19</span>
+                  </LegendItem>
+                  <LegendItem>
+                    <LegendColor color="#1e40af" />
+                    <span>20-29</span>
+                  </LegendItem>
+                  <LegendItem>
+                    <LegendColor color="#1e3a8a" />
+                    <span>30+</span>
+                  </LegendItem>
+                </ContributionLegend>
+              </ContributionsContainer>
+            </ProfileContainer>
+          </>
         ) : (
           !error && <p style={{ textAlign: 'center', color: '#64748b' }}>Search for a GitHub user to see their profile</p>
         )}
